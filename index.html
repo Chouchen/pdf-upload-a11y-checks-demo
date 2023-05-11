@@ -18,7 +18,7 @@
         function checkFile(e) {
             const formData  = new FormData();
             formData.append('pdf', e);
-            fetch('/check', {
+            fetch('./check.php', {
                 method: 'POST',
                 body: formData
             }).then((response) => response.json())
@@ -59,7 +59,6 @@
             <label for="file">Please select a file to upload</label>
             <input type='file' name='file' id="file" />
             <p id="message"></p>
-            <button>Send</button>
         </form>
     </body>
 </html>
