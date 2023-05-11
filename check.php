@@ -1,13 +1,21 @@
 <?php
 
-function initAnalysis() {
+use Smalot\PdfParser\Parser;
+use Smalot\PdfParser\PDFObject;
+
+$outputFields = [ 'BrokenFile', 'TaggedTest', 'EmptyTextTest', 'ProtectedTest', '_log', 'fonts', 'numTxtObjects'];
+$debug = false;
+
+function initAnalysis(): array
+{
     return [
         'numTxt' => 0,
         'fontNames' => [],
     ];
 }
 
-function mergeAnalyses($a, $b) {
+function mergeAnalyses($a, $b): array
+{
     $res = [];
     foreach (array_keys($a) as $i) {
         if ($i === 'fontNames') {
@@ -25,12 +33,13 @@ function analyseContent($content, bool $isXObject = false) {
         $xobject = $content . $Resources . get('/XObject');
         if (!empty($xobject)) {
             foreach ($xobject as $i => $t) {
-               if ((string) $t . get('/Subtype') === '/Form' && empty($t . get('/Ref'))) {
-                   $res = mergeAnalyses($res, analyseContent($t, true));
-               }
+                if ((string)$t . get('/Subtype') === '/Form' && empty($t . get('/Ref'))) {
+                    $res = mergeAnalyses($res, analyseContent($t, true));
+                }
             }
         }
-
+    }
+/*
         if (content . Resources . get('/Font') is not None):
             # get all font names
             for i in content . Resources . Font:
@@ -47,18 +56,13 @@ function analyseContent($content, bool $isXObject = false) {
                 res['numTxt'] += 1
     }
 
-    return $res;
+    return $res;*/
 }
-from pikepdf import Pdf, _qpdf
-import pikepdf
-from bitstring import BitArray
-
 # code extracted from https://github.com/accessibility-luxembourg/simplA11yPDFCrawler
 
-outputFields = [ 'BrokenFile', 'TaggedTest', 'EmptyTextTest', 'ProtectedTest', '_log', 'fonts', 'numTxtObjects']
-debug = False
 
 
+/*
 def analyseContent(content, isXObject:bool = False):
     res = initAnalysis()
     if (content.get('/Resources') is not None):
@@ -84,8 +88,10 @@ def analyseContent(content, isXObject:bool = False):
                 res['numTxt'] += 1
 
     return res
+*/
+function checkFile(string $file, bool $debug = false) {
+    global $outputFields;
 
-function checkFile($file, bool $debug = false) {
     $result = [];
 
     foreach ($outputFields as $f => $outputField) {
@@ -94,34 +100,46 @@ function checkFile($file, bool $debug = false) {
 
     $result['_log'] = '';
 
+    $parser = new Parser();
+    try {
+        $pdf = $parser->parseFile($file);
+        $types = array_map(static fn (PDFObject $o) => array_keys($o->getHeader()?->getElements()), $pdf->getObjects());
+        if (in_array('StructTreeRoot', array_merge(...array_values($types)), true)) {
+            $markInfoFound = false;
+            foreach ($types as $id => $type) {
+                if (in_array('MarkInfo', $type, true)) {
+                    $markInfoFound = true;
+                    $markInfoChildren = $pdf->getObjectById($id)?->getHeader()?->getElements()['MarkInfo'];
+                    if ($markInfoChildren === null || !array_key_exists('Marked', $markInfoChildren->getElements()) || $markInfoChildren->getElements()['Marked']->getContent() === false) {
+                        $result['TaggedTest'] = 'Fail';
+                        $result['_log'] .= 'tagged, ';
+                    } else {
+                        $result['TaggedTest'] = 'Pass';
+                    }
+                }
+            }
 
+            if (!$markInfoFound) {
+                $result['TaggedTest'] = 'Fail';
+                $result['_log'] .= 'tagged, ';
+            }
+        } else {
+            $result['TaggedTest'] = 'Fail';
+            $result['_log'] .= 'tagged, ';
+        }
+
+        // check if not protected
+        $result['ProtectedTest'] = 'Pass';
+        $test = $pdf->getDetails();
+        var_dump($test);
+
+    } catch (Exception $e) {
+    }
+
+    return $result;
 }
-def checkFile(file, debug: bool = False):
+/*def checkFile(file, debug: bool = False):
     try:
-        pdf = Pdf.open(file)
-
-        # check if Tagged
-        # TODO: extend checks here by verifying that all objects in the document are tagged (cf Matterhorn Checkpoint 01)
-        structTreeRoot = pdf.Root.get('/StructTreeRoot')
-        if (structTreeRoot is not None):
-            markInfo = pdf.Root.get('/MarkInfo')
-            if (markInfo is not None):
-                marked = markInfo.get('/Marked')
-                if (marked is not None):
-                    if (marked == False):
-                        result['TaggedTest'] = 'Fail'
-                        result['_log'] += 'tagged, '
-                    else:
-                        result['TaggedTest'] = 'Pass'
-                else:
-                    result['TaggedTest'] = 'Fail'
-                    result['_log'] += 'tagged, '
-            else:
-                result['TaggedTest'] = 'Fail'
-                result['_log'] += 'tagged, '
-        else:
-            result['TaggedTest'] = 'Fail'
-            result['_log'] += 'tagged, '
 
         # check if not protected
         result['ProtectedTest'] = 'Pass'
@@ -173,7 +191,7 @@ def checkFile(file, debug: bool = False):
         result['_log'] += 'ValueError: {0}'.format(err)
 
     return result
-
+*/
 
 function toJSON($inputfile, bool $debug = false) {
     $result = checkFile($inputfile);
